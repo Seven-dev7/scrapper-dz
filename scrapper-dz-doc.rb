@@ -91,26 +91,76 @@ require 'csv'
   [16, 50, "Urologue pédiatrique"]
 ]
 
-def scrapper
-  url = "https://dzdoc.com/"
-  #url = "https://www.sahti-dz.com/recherche.aspx?p=#{id_1}&sp=#{id_2}&w=&c=&s=&disp=&sort=&page=1#ShowResults"
+@total = []
+
+def scrapper(id_1:, id_2:, type:, number:)
+  url = "https://dzdoc.com/recherche.php?specialite=#{id_2}&region=#{id_1}"
   unparsed_page = HTTParty.get(url)
   parsed_page = Nokogiri::HTML(unparsed_page)
-  jobs = []
-  job_listings = parsed_page.css('html body div.push div.container-fluid div.container div.row.mar-b-20 div.col-md-6.pad-b-35.box-shadow form#recherche div.form-group div.selectize-control.form-control.single div.selectize-dropdown.single.form-control div.selectize-dropdown-content').text
-  #per_page = job_listings.count
-  byebug
-  #total = parsed_page.css('').text.split.map {|x| x[/\d+/]}.first.to_i
-  #@total << total
+  job_listings = parsed_page.xpath('/html/body/div[3]/div[1]/div[2]/div').first.children.children.children.children.children.text
+  per_page = parsed_page.xpath('/html/body/div[3]/div[1]/div[2]/div').count
+  array_of_values = job_listings.split("\n").map{|v| v.strip }.reject { |c| c.strip.empty? }
   page = 1
-  #last_page = (total.to_f / per_page.to_f).round
-  #while page <= last_page
-#
-  #end
+  last_page = 50
+  jobs = []
+  while page <= last_page
+    pagination_url = "https://dzdoc.com/recherche.php?specialite=#{id_2}&region=#{id_1}&p=#{page}"
+    puts pagination_url
+    puts "#{page}"
+    puts " "
+    pagination_unparsed_page = HTTParty.get(pagination_url)
+    pagination_parsed_page = Nokogiri::HTML(pagination_unparsed_page)
+    pagination_job_listings = pagination_parsed_page.xpath('/html/body/div[3]/div[1]/div[2]/div[1]/div/div')
+    pagination_job_listings.each do |job_listing|
+      data_hash = {
+        #full_name: job_listing.children[1].children[1].children[1].children[1].children[1].children[3].text.split("\n").map{|c| c.strip }.reject{ |v| v.empty? }[0],
+        full_name: job_listing.text.split("\n").map{|c| c.strip }.reject{|v| v.empty? }[0],
+        address: job_listing.text.split("\n").map{|c| c.strip }.reject{|v| v.empty? }[2],
+        city: "Alger",
+        speciality: job_listing.text.split("\n").map{|c| c.strip }.reject{|v| v.empty? }[1]
+      }
+      jobs << [data_hash[:full_name], data_hash[:address], data_hash[:city], data_hash[:speciality]]
+      puts "#{job_listing.text.split.first} ajouté"
+      puts " "
+    end
+    page += 1
+  end
+  @total << jobs.count
+  data_array = formatting(job_array: jobs, type: type, number: number)
+  export_csv(data_array: data_array, type: type)
 end
 
+def formatting(job_array:, type:, number:)
+  number = 1 if number.nil?
+  job_array.map do |job|
+    hash = {
+      full_name: job.first.nil? ? "Nom non-trouvé" : job.first,
+      address: job[1],
+      city: job[2],
+      speciality: job.last.nil? ? "Spécialité non trouvée" : job.last.split.pop(number).join(' ').strip
+    }
+  end
+end
+
+def export_csv(data_array:, type:)
+  counter = 0
+  CSV.open("csv/#{type}_#{Time.now.strftime("%Y-%d-%m")}_#{Time.now.strftime("%H:%M:%S")}.csv", "w") do |csv|
+    csv << ["full_name", "address", "city", "speciality"]
+    data_array.map do |hash_info|
+      csv << hash_info.values
+      counter += 1
+    end
+    p "#{counter} datas importés de type : #{type} datant du #{Time.now.strftime("%Y-%d-%m")} à #{Time.now.strftime("%H:%M:%S")}"
+  end
+end
+
+
 def perform
-  scrapper
+  @values.each do |value|
+    scrapper(id_1: value[0], id_2: value[1], type: value[2], number: value[3])
+  end
+  p "Fin du Scrapping des professionels de #{@values.count} spécialitées différentes"
+  p "#{@total.sum} professionnels différents importé"
 end
 
 perform
