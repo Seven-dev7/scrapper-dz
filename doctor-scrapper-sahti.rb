@@ -3,14 +3,14 @@ require 'httparty'
 require 'byebug'
 require 'csv'
 
-ARRAY = [
-  [2, 12, 'Pharmacien'],
-  [1, 35, 'Chirurgien dentiste'],
-  [0, 39, "Cardiologue"],
-  [0, 27, "Chirurgien général"],
-  [0, 42, 'Medecine generale']
+VALUES = [ # id_1: select 1, id_2: select 2, type, number: nombre de mot dans le type
+  [2, 12, "Pharmacien", 1],
+  [1, 35, "Chirurgien dentiste", 2],
+  [0, 39, "Cardiologue", 1],
+  [0, 27, "Chirurgien général", 2],
+  [0, 42, "Médecin généraliste", 2]
 ]
-def scrapper(id_1: , id_2:, type:)
+def scrapper(id_1: , id_2:, type:, number:)
   url = "https://www.sahti-dz.com/recherche.aspx?p=#{id_1}&sp=#{id_2}&w=&c=&s=&disp=&sort=&page=1#ShowResults"
   unparsed_page = HTTParty.get(url)
   parsed_page = Nokogiri::HTML(unparsed_page)
@@ -40,15 +40,15 @@ def scrapper(id_1: , id_2:, type:)
     end
     page += 1
   end
-  data_array = formatting(job_array: jobs, type: type, number: 2)
+  data_array = formatting(job_array: jobs, type: type, number: number)
   export_csv(data_array: data_array, type: type)
 end
 
 def formatting(job_array:, type:, number: 1)
   job_array.map do |job|
     hash = {
-      full_name: job.first.split.reject{ |k| k == type }.join(' '),
-      speciality: number == 2 ? job.first.split.pop(2).join(' ').strip : job.first.split.pop.strip,
+      full_name: number == 2 ? job.first.split[0..-3].join(' ') : job.first.split[0..-2].join('').strip,
+      speciality: job.first.split.pop(number).join(' ').strip,
       address: job[1],
       city: job[1].split(" ").last.tr("0-9", ""),
       phone_number: job[1].split(" ").last.delete('^0-9')
@@ -69,8 +69,8 @@ def export_csv(data_array:, type:)
 end
 
 def perform
-  ARRAY.each do |ids|
-    scrapper(id_1: ids[0], id_2: ids[1], type: ids[2])
+  VALUES.each do |value|
+    scrapper(id_1: value[0], id_2: value[1], type: value[2], number: value[3])
   end
   p "Fin du Scrapping"
 end
